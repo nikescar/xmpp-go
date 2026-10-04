@@ -3,6 +3,7 @@ package xmpp
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/xml"
 	"errors"
 	"net"
@@ -106,7 +107,28 @@ func (c *Client) dialTransport(ctx context.Context) (transport.Transport, error)
 	case c.opts.boshURL != "":
 		return transport.DialBOSHClient(c.opts.boshURL, c.addr.Domain())
 	case c.opts.connectAddr != "":
-		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", c.opts.connectAddr)
+		var conn net.Conn
+		var err error
+		netDialer := &net.Dialer{Timeout: c.dialer.Timeout}
+
+		if c.dialer.DirectTLS {
+			// Direct TLS on pinned address: use dialer's TLS config (includes ALPN)
+			tlsCfg := c.dialer.TLSConfig
+			if tlsCfg == nil {
+				tlsCfg = &tls.Config{ServerName: c.addr.Domain()}
+			} else {
+				// Clone and set ServerName if not already set
+				tlsCfg = tlsCfg.Clone()
+				if tlsCfg.ServerName == "" {
+					tlsCfg.ServerName = c.addr.Domain()
+				}
+			}
+			tlsDialer := &tls.Dialer{NetDialer: netDialer, Config: tlsCfg}
+			conn, err = tlsDialer.DialContext(ctx, "tcp", c.opts.connectAddr)
+		} else {
+			conn, err = netDialer.DialContext(ctx, "tcp", c.opts.connectAddr)
+		}
+
 		if err != nil {
 			return nil, err
 		}
