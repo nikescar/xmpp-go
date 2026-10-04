@@ -60,6 +60,9 @@ func NewClient(addr jid.JID, password string, opts ...ClientOption) (*Client, er
 	if c.opts.directTLS {
 		c.dialer.DirectTLS = true
 	}
+	if c.opts.tlsConfig != nil {
+		c.dialer.TLSConfig = c.opts.tlsConfig
+	}
 
 	return c, nil
 }
